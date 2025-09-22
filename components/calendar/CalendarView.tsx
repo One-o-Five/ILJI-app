@@ -1,5 +1,5 @@
 import React, {useState, useMemo, useRef, useEffect} from 'react';
-import {View, Text, FlatList} from 'react-native';
+import {View, Text, FlatList, Dimensions, Alert} from 'react-native';
 import PagerView from 'react-native-pager-view';
 import {
     format,
@@ -7,32 +7,34 @@ import {
     sub,
     isValid,
     isSameDay,
+    set,
+    differenceInCalendarDays
 } from 'date-fns';
 import * as CS from '../style/CalendarStyled';
 import MonthView from './MonthView';
 import WeekView from './WeekView';
 import DayView from './DayView';
-import DetailSchedule from '@/components/schedule/detail-schedule';
 import { Schedule } from '@/components/calendar/scheduleTypes';
 import { Tag } from '@/components/tag/TagTypes';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ThemeColors } from "@/types/theme";
 
 interface SixWeekCalendarProps {
     date: Date;
     onDateChange: (newDate: Date) => void;
     schedules: Schedule[];
     tags: Tag[];
-    onSchedulesChange: (schedules: Schedule[]) => void;
+    onEventPress?: (event: Schedule) => void;
+    colors: ThemeColors; // colors prop 추가
 }
 
-const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, schedules, tags, onSchedulesChange}) => {
+const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, schedules, tags, onEventPress, colors}) => {
     const pagerRef = useRef<PagerView>(null);
     const monthFlatListRef = useRef<FlatList>(null);
     const weekPagerRef = useRef<PagerView>(null);
     const dayPagerRef = useRef<PagerView>(null);
 
     const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
-    const [selectedDate, setSelectedDate] = useState(date);
     const [monthContainerHeight, setMonthContainerHeight] = useState(0);
 
     const [isModalVisible, setModalVisible] = useState(false);
@@ -43,7 +45,11 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
     const [days, setDays] = useState([sub(date, {days: 1}), date, add(date, {days: 1})]);
 
     const timedSchedules = useMemo(() => {
-        return schedules.filter(schedule => !schedule.isAllDay);
+        return schedules.filter(schedule => {
+            const isNotAllDay = !schedule.isAllDay;
+            const isSingleDay = differenceInCalendarDays(schedule.endTime, schedule.startTime) < 1;
+            return isNotAllDay && isSingleDay;
+        });
     }, [schedules])
 
     const insets = useSafeAreaInsets();
@@ -65,7 +71,7 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
     if (!isValid(date)) {
         return (
             <CS.MonthLoadingContainer>
-                <Text>Loading...</Text>
+                <Text style={{ color: colors.text }}>Loading...</Text>
             </CS.MonthLoadingContainer>
         );
     }
@@ -80,30 +86,7 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
 
     const handleDayPress = (day: Date) => {
         onDateChange(day);
-        setSelectedDate(day);
         pagerRef.current?.setPage(2);
-    };
-
-    const handleEventPress = (event: Schedule) => {
-        setSelectedEvent(event);
-        setModalVisible(true);
-    };
-
-    const handleCloseModal = () => {
-        setModalVisible(false);
-        setTimeout(() => setSelectedEvent(null), 300);
-    };
-
-    const handleUpdateSchedule = (updatedSchedule: Schedule) => {
-        const newSchedules = schedules.map(s => s.id === updatedSchedule.id ? updatedSchedule : s);
-        onSchedulesChange(newSchedules);
-    };
-
-    const handleDeleteEvent = () => {
-        if (!selectedEvent) return;
-        const newSchedules = schedules.filter(schedule => schedule.id !== selectedEvent.id);
-        onSchedulesChange(newSchedules);
-        handleCloseModal();
     };
 
     const viewModes: ('month' | 'week' | 'day')[] = ['month', 'week', 'day'];
@@ -113,21 +96,18 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
     };
 
     return (
-        <CS.MonthContainer style={{ paddingBottom: insets.bottom }}>
+        <CS.MonthContainer style={{ paddingBottom: insets.bottom }} $colors={colors}>
             <CS.MonthHeader>
-                <CS.MonthText>{format(date, 'MMMM yyyy')}</CS.MonthText>
-                <CS.ViewModeButtonContainer>
-                    <CS.ViewMonthButton $isActive={viewMode === 'month'}
-                                      onPress={() => handleViewModeButtonPress('month')}>
-                        <CS.ViewModeButtonText $isActive={viewMode === 'month'}>M</CS.ViewModeButtonText>
+                <CS.MonthText $colors={colors}>{format(date, 'MMMM yyyy')}</CS.MonthText>
+                <CS.ViewModeButtonContainer $colors={colors}>
+                    <CS.ViewMonthButton $isActive={viewMode === 'month'} onPress={() => handleViewModeButtonPress('month')} $colors={colors}>
+                        <CS.ViewModeButtonText $isActive={viewMode === 'month'} $colors={colors}>M</CS.ViewModeButtonText>
                     </CS.ViewMonthButton>
-                    <CS.ViewWeekButton $isActive={viewMode === 'week'}
-                                      onPress={() => handleViewModeButtonPress('week')}>
-                        <CS.ViewModeButtonText $isActive={viewMode === 'week'}>W</CS.ViewModeButtonText>
+                    <CS.ViewWeekButton $isActive={viewMode === 'week'} onPress={() => handleViewModeButtonPress('week')} $colors={colors}>
+                        <CS.ViewModeButtonText $isActive={viewMode === 'week'} $colors={colors}>W</CS.ViewModeButtonText>
                     </CS.ViewWeekButton>
-                    <CS.ViewDayButton $isActive={viewMode === 'day'}
-                                      onPress={() => handleViewModeButtonPress('day')}>
-                        <CS.ViewModeButtonText $isActive={viewMode === 'day'}>D</CS.ViewModeButtonText>
+                    <CS.ViewDayButton $isActive={viewMode === 'day'} onPress={() => handleViewModeButtonPress('day')} $colors={colors}>
+                        <CS.ViewModeButtonText $isActive={viewMode === 'day'} $colors={colors}>D</CS.ViewModeButtonText>
                     </CS.ViewDayButton>
                 </CS.ViewModeButtonContainer>
             </CS.MonthHeader>
@@ -162,6 +142,7 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
                                         schedules={schedules}
                                         tags={tags}
                                         onDayPress={handleDayPress}
+                                        colors={colors}
                                     />
                                 </View>
                             )}
@@ -194,7 +175,8 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
                                     schedules={timedSchedules}
                                     tags={tags}
                                     onDayPress={handleDayPress}
-                                    onEventPress={handleEventPress}
+                                    onEventPress={onEventPress}
+                                    colors={colors}
                                 />
                             </View>
                         ))}
@@ -210,7 +192,6 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
                         onPageSelected={(e) => {
                             if (e.nativeEvent.position !== 1) {
                                 onDateChange(days[e.nativeEvent.position]);
-                                setSelectedDate(days[e.nativeEvent.position]);
                             }
                         }}
                     >
@@ -220,22 +201,14 @@ const CalendarView: React.FC<SixWeekCalendarProps> = ({date, onDateChange, sched
                                     date={dayDate}
                                     schedules={timedSchedules.filter(schedule => isSameDay(schedule.startTime, dayDate))}
                                     tags={tags}
-                                    onEventPress={handleEventPress}
+                                    onEventPress={onEventPress}
+                                    colors={colors}
                                 />
                             </View>
                         ))}
                     </PagerView>
                 </View>
             </PagerView>
-
-            <DetailSchedule
-                schedule={selectedEvent}
-                visible={isModalVisible}
-                onClose={handleCloseModal}
-                onDelete={handleDeleteEvent}
-                onUpdate={handleUpdateSchedule}
-                tags={tags}
-            />
         </CS.MonthContainer>
     );
 };
